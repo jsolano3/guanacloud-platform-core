@@ -1,0 +1,99 @@
+name: Deploy GuanaCloud Platform to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+env:
+  PROJECT_ID: guanacloud-platform-core
+  REGION: us-central1
+  REPO_NAME: guanacloud-platform-core
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v1'
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Set Environment Variables for Tagging
+        run: |
+          if [[ $GITHUB_REF_NAME == 'main' ]]; then
+            echo "SERVICE_NAME=guanacloud-platform-prod" >> $GITHUB_ENV
+            echo "DB_PASS_SECRET_NAME=guanacloud-postgres-password-prod" >> $GITHUB_ENV
+            echo "DB_INSTANCE_NAME=guanacloud-postgres-prod" >> $GITHUB_ENV
+            echo "BIGQUERY_DATASET=guanacloud_helpdesk_prod" >> $GITHUB_ENV
+            echo "FIRESTORE_DATABASE_ID=guanacloud-platform-prod" >> $GITHUB_ENV
+            echo "APP_BASE_URL=https://guanacloud-platform-prod-xxxxxxxxxx-uc.a.run.app" >> $GITHUB_ENV
+          else
+            echo "SERVICE_NAME=guanacloud-platform-dev" >> $GITHUB_ENV
+            echo "DB_PASS_SECRET_NAME=guanacloud-postgres-password-dev" >> $GITHUB_ENV
+            echo "DB_INSTANCE_NAME=guanacloud-postgres-dev" >> $GITHUB_ENV
+            echo "BIGQUERY_DATASET=guanacloud_helpdesk_dev" >> $GITHUB_ENV
+            echo "FIRESTORE_DATABASE_ID=guanacloud-platform-dev" >> $GITHUB_ENV
+            echo "APP_BASE_URL=https://guanacloud-platform-dev-xxxxxxxxxx-uc.a.run.app" >> $GITHUB_ENV
+          fi
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          
+          min_instances: "1"
+          vpc_connector: "guanacloud-vpc-connector"
+          vpc_egress: "all-traffic"
+          
+          env_vars: |-
+            LOOKERSDK_BASE_URL=https://connect.cloud.looker.com
+            LOOKER_DASHBOARD_ID=388
+            DB_USER=postgres
+            DB_NAME=postgres
+            DB_CONNECTION_NAME=${{ env.PROJECT_ID }}:${{ env.REGION }}:${{ env.DB_INSTANCE_NAME }}
+            GCS_ATTACHMENT_BUCKET=guanacloud-ticket-attachments
+            FIRESTORE_DATABASE_ID=${{ env.FIRESTORE_DATABASE_ID }}
+            BIGQUERY_DATASET_ID=${{ env.BIGQUERY_DATASET }}
+            GCP_PROJECT_ID=${{ env.PROJECT_ID }}
+            LOCATION=${{ env.REGION }}
+            GEMINI_TASK_MODEL=gemini-2.5-pro
+            GEMINI_CHAT_MODEL=gemini-2.5-flash
+            IMAGEN_MODEL=imagegeneration@006
+            EMBEDDING_MODEL_NAME=text-embedding-005
+            KNOWLEDGE_BASE_BUCKET=guanacloud-knowledge-base
+            LOOKER_GCS_BUCKET=guanacloud-looker-looks
+            SENDER_EMAIL=jose.solano@guanacloud.com
+            SENDER_NAME=Soporte GuanaCloud
+            ASANA_PROJECT_GID=1204402129492806
+            ASANA_LEAD_DATA_ENGINEERING_GID=1208694952453152
+            ASANA_LEAD_BI_ANALYST_GID=1205224117672129
+            APP_BASE_URL=${{ env.APP_BASE_URL }}
+
+          secrets: |-
+            DB_PASS=${{ env.DB_PASS_SECRET_NAME }}:latest
+            BREVO_API_KEY=BREVO_API_KEY:latest
+            ASANA_PERSONAL_ACCESS_TOKEN=asana-pat:latest
+            GOOGLE_CHAT_WEBHOOK_URL=GOOGLE_CHAT_WEBHOOK_URL:latest
+            LOOKERSDK_CLIENT_ID=LOOKERSDK_CLIENT_ID:latest
+            LOOKERSDK_CLIENT_SECRET=LOOKERSDK_CLIENT_SECRET:latest
+            GITHUB_PAT=GITHUB_PAT:latest
+            GITHUB_WEBHOOK_SECRET=GITHUB_WEBHOOK_SECRET:latest

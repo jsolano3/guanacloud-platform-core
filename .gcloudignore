@@ -1,0 +1,22 @@
+# Ignorar todos los archivos de Git
+.git/
+.gitignore
+
+# Ignorar la infraestructura como código
+terraform/
+
+# Ignorar el entorno virtual de Python y dependencias locales
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Ignorar archivos de configuración local y de sistema operativo
+.env
+.DS_Store
+token.json
+credentials.json
+
+# Ignorar archivos de prueba y temporales
+test_kb.py
+*.png
