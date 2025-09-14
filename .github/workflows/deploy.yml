@@ -60,9 +60,6 @@ jobs:
           region: ${{ env.REGION }}
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           
-          min_instances: "1"
-          vpc_connector: "guanacloud-vpc-connector"
-          vpc_egress: "all-traffic"
           
           env_vars: |-
             LOOKERSDK_BASE_URL=https://connect.cloud.looker.com
